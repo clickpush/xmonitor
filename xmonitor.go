@@ -115,4 +115,3 @@ func (m *MonitoredResponseWriter) Write(b []byte) (int, error) {
 func (m *MonitoredResponseWriter) Header() http.Header {
 	return m.w.Header()
 }
-
