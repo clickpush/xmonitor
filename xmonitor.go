@@ -17,6 +17,7 @@ const (
 type Config struct {
 	// ...
 	SendMetricsEnabled bool
+	SendMetricsTimeout *time.Duration
 	Destination        string
 	LogingEnabled      bool
 }
@@ -26,6 +27,10 @@ type XMonitor struct {
 }
 
 func New(cfg Config) *XMonitor {
+	if cfg.SendMetricsTimeout == nil {
+		dur := 500 * time.Millisecond
+		cfg.SendMetricsTimeout = &dur
+	}
 	return &XMonitor{cfg}
 }
 
@@ -53,7 +58,7 @@ func (x *XMonitor) sendMetric(r *http.Request, statusCode int, latency *time.Dur
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), *x.cfg.SendMetricsTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, x.cfg.Destination, bytes.NewBuffer(byt))
