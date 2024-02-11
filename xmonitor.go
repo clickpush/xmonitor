@@ -16,8 +16,9 @@ const (
 
 type Config struct {
 	// ...
-	Destination   string
-	LogingEnabled bool
+	SendMetricsEnabled bool
+	Destination        string
+	LogingEnabled      bool
 }
 
 type XMonitor struct {
@@ -28,13 +29,14 @@ func New(cfg Config) *XMonitor {
 	return &XMonitor{cfg}
 }
 
-func (x *XMonitor) sendMetric(r *http.Request, statusCode int) error {
+func (x *XMonitor) sendMetric(r *http.Request, statusCode int, latency *time.Duration) error {
 	// send the metric
 	data := map[string]interface{}{
 		// request data
 		"request": map[string]interface{}{
 			"method": r.Method,
 			"uri":    r.RequestURI,
+			"host":   r.Host,
 		},
 		// response data
 		"response": map[string]interface{}{
@@ -42,12 +44,16 @@ func (x *XMonitor) sendMetric(r *http.Request, statusCode int) error {
 		},
 	}
 
+	if latency != nil {
+		data["response"].(map[string]interface{})["latency"] = latency
+	}
+
 	byt, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, x.cfg.Destination, bytes.NewBuffer(byt))
@@ -84,24 +90,31 @@ func (x *XMonitor) MonitorHandler(h http.Handler) http.Handler {
 	})
 }
 
-func (x *XMonitor) SendMetric(r *http.Request, statusCode int) error {
-	return x.sendMetric(r, statusCode)
+func (x *XMonitor) SendMetric(r *http.Request, statusCode int, latency *time.Duration) error {
+	return x.sendMetric(r, statusCode, latency)
 }
 
 type MonitoredResponseWriter struct {
 	x             *XMonitor
 	r             *http.Request
 	w             http.ResponseWriter
+	tStart        *time.Time
 	headerWritten bool
 }
 
 func (x *XMonitor) NewMonitoredResponseWriter(r *http.Request, w http.ResponseWriter) *MonitoredResponseWriter {
-	return &MonitoredResponseWriter{x: x, r: r, w: w}
+	tStart := time.Now()
+	return &MonitoredResponseWriter{x: x, r: r, w: w, tStart: &tStart}
 }
 
 func (m *MonitoredResponseWriter) WriteHeader(statusCode int) {
 	go func() {
-		err := m.x.sendMetric(m.r, statusCode)
+		var latency *time.Duration
+		if m.tStart != nil {
+			l := time.Since(*m.tStart)
+			latency = &l
+		}
+		err := m.x.sendMetric(m.r, statusCode, latency)
 		if err != nil && m.x.cfg.LogingEnabled {
 			fmt.Println("failed to send metric:", err)
 		}
