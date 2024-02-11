@@ -113,12 +113,12 @@ func (x *XMonitor) NewMonitoredResponseWriter(r *http.Request, w http.ResponseWr
 }
 
 func (m *MonitoredResponseWriter) WriteHeader(statusCode int) {
+	var latency *time.Duration
+	if m.tStart != nil {
+		l := time.Since(*m.tStart)
+		latency = &l
+	}
 	go func() {
-		var latency *time.Duration
-		if m.tStart != nil {
-			l := time.Since(*m.tStart)
-			latency = &l
-		}
 		err := m.x.sendMetric(m.r, statusCode, latency)
 		if err != nil && m.x.cfg.LogingEnabled {
 			fmt.Println("failed to send metric:", err)
