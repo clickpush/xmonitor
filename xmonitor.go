@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	LocalDestination       = "http://localhost:8080/metrics/create"
-	DockerLocalDestination = "http://xmonitor:8080/metric/create"
-	ProdDestination        = "https://xmonitor.clickpush.xyz/metric/create"
+	LocalDestination = "http://localhost:8080/metrics/create"
+	ProdDestination  = "https://xmonitor.clickpush.xyz/metrics/create"
 )
 
 type Config struct {
