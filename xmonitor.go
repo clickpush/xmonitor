@@ -2,9 +2,11 @@ package xmonitor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 const (
@@ -46,7 +48,10 @@ func (x *XMonitor) sendMetric(r *http.Request, statusCode int) error {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, x.cfg.Destination, bytes.NewBuffer(byt))
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, x.cfg.Destination, bytes.NewBuffer(byt))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -59,7 +64,7 @@ func (x *XMonitor) sendMetric(r *http.Request, statusCode int) error {
 		return fmt.Errorf("failed to send metric: %w", err)
 	}
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusCreated {
 		return fmt.Errorf("failed to send metric: %s", res.Status)
 	}
 
@@ -96,10 +101,12 @@ func (x *XMonitor) NewMonitoredResponseWriter(r *http.Request, w http.ResponseWr
 }
 
 func (m *MonitoredResponseWriter) WriteHeader(statusCode int) {
-	err := m.x.sendMetric(m.r, statusCode)
-	if err != nil && m.x.cfg.LogingEnabled {
-		fmt.Println("failed to send metric:", err)
-	}
+	go func() {
+		err := m.x.sendMetric(m.r, statusCode)
+		if err != nil && m.x.cfg.LogingEnabled {
+			fmt.Println("failed to send metric:", err)
+		}
+	}()
 
 	m.w.WriteHeader(statusCode)
 	m.headerWritten = true
